@@ -31,6 +31,24 @@ QUESTIONS=[{'cat': '動物世界', 'q': '海獺睡在海面上時，有時會牽
 used=[]
 recent_global=[]
 
+# V15 high-quality solo test: every question gets a readable explanation without
+# calling an AI service while people play. Hand-curated explanations can be added
+# through an `exp` field; this fallback covers the full existing question bank.
+def question_explanation(q):
+    if q.get('exp'):
+        return q['exp']
+    answer=q['opts'][q['a']]
+    text=q['q']
+    if any(k in text for k in ('為什麼','主要因為','原因','用途')):
+        return f'因為「{answer}」。這正是題目所描述現象發生的主要原因。'
+    if q.get('cat') in ('趣味數學','腦力挑戰','邏輯推理'):
+        return f'依照題目中的條件逐步推算，可以得到「{answer}」；關鍵是不要被題目的直覺說法誤導。'
+    if q.get('cat')=='燈謎字謎':
+        return f'答案是「{answer}」。把題目的文字線索拆開來看，就會對應到這個答案。'
+    if q.get('cat')=='文化語文':
+        return f'「{answer}」最符合這句話或故事原本要表達的意思。'
+    return f'正確答案是「{answer}」。它最符合題目描述的事實與條件，其他選項與題意不相符。'
+
 
 async def broadcast(msg, role=None):
     dead=[]
@@ -59,7 +77,7 @@ async def sw():
 
 @app.get('/icon.svg')
 async def icon():
-    svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="110" fill="#6b3cff"/><text x="256" y="305" text-anchor="middle" font-size="260">🐟</text><text x="256" y="455" text-anchor="middle" font-size="64" font-weight="900" fill="white">翻身</text></svg>'
+    svg='''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><radialGradient id="b"><stop stop-color="#214b9b"/><stop offset="1" stop-color="#080b2b"/></radialGradient><linearGradient id="g" x2="0" y2="1"><stop stop-color="#fff7a6"/><stop offset=".45" stop-color="#ffc52d"/><stop offset="1" stop-color="#b86600"/></linearGradient></defs><rect width="512" height="512" rx="108" fill="url(#b)"/><path d="M42 362Q256 430 470 362" fill="none" stroke="#58dfff" stroke-width="10" opacity=".65"/><path d="M99 167c76-102 238-91 302 21-44-21-74-18-105 1 43 15 73 47 86 89-75-50-163-58-232-17-34 20-59 10-74-11 18-12 34-34 23-83z" fill="url(#g)" stroke="#fff1a4" stroke-width="9"/><circle cx="164" cy="197" r="14" fill="#111"/><path d="M122 124l39-70 45 55 53-72 43 69 68-38-13 98" fill="url(#g)" stroke="#fff1a4" stroke-width="8"/><circle cx="162" cy="74" r="10" fill="#ec3d43"/><circle cx="259" cy="55" r="10" fill="#2aa7ff"/><circle cx="349" cy="83" r="10" fill="#ec3d43"/><text x="256" y="353" text-anchor="middle" font-size="78" font-weight="1000" fill="white" stroke="#392000" stroke-width="10" paint-order="stroke">鹹魚翻身</text><text x="256" y="420" text-anchor="middle" font-size="36" font-weight="900" fill="#81efff">益智大挑戰</text></svg>'''
     return Response(svg,media_type='image/svg+xml')
 
 
@@ -216,7 +234,8 @@ async def run_game(seconds=20):
                         eliminated.remove(ace)
         # if everyone would be eliminated, nobody is eliminated; continue to avoid zero-winner tie
         if len(eliminated)==len(state['players']) and len(state['players'])>1:
-            await broadcast({'type':'round','result':'all_wrong','correct':correct_idx,'correct_text':shown[correct_idx],'category':q['cat'],'human_correct':human_correct,'eliminated_names':[],'remaining_names':[r['name'] for r in state['players'].values()],'remaining_count':len(state['players'])})
+            await broadcast({'type':'round','result':'all_wrong','correct':correct_idx,'correct_text':shown[correct_idx],'explanation':question_explanation(q),'category':q['cat'],'human_correct':human_correct,'eliminated_names':[],'remaining_names':[r['name'] for r in state['players'].values()],'remaining_count':len(state['players'])})
+            await asyncio.sleep(7)
         else:
             bot_reactions=[]
             for pid,rec in list(state['players'].items()):
@@ -226,15 +245,18 @@ async def run_game(seconds=20):
                     elif pid not in eliminated and state['answers'].get(pid)==correct_idx and rec.get('winline') and random.random()<0.35:
                         bot_reactions.append(rec['name']+'：「'+rec['winline']+'」')
             random.shuffle(bot_reactions); bot_reactions=bot_reactions[:2]
+            eliminated_humans=[]
             for pid in eliminated:
                 rec=state['players'].pop(pid); rec['alive']=False; state['spectators'][pid]=rec
+                if not rec.get('bot'): eliminated_humans.append(pid)
+            await broadcast({'type':'round','result':'resolved','correct':correct_idx,'correct_text':shown[correct_idx],'explanation':question_explanation(q),'category':q['cat'],'human_correct':human_correct,'eliminated':eliminated,'eliminated_names':[state['spectators'][x]['name'] for x in eliminated if x in state['spectators']],'remaining_names':[r['name'] for r in state['players'].values()],'remaining_count':len(state['players']),'round_no':state['question_no'],'bot_reactions':bot_reactions})
+            await asyncio.sleep(7)
+            for pid in eliminated_humans:
                 for w,m in clients.items():
                     if m.get('pid')==pid:
                         m['role']='spectator'
                         try: await w.send_text(json.dumps({'type':'role_changed','role':'spectator','reason':'eliminated'},ensure_ascii=False))
                         except: pass
-            await broadcast({'type':'round','result':'resolved','correct':correct_idx,'correct_text':shown[correct_idx],'category':q['cat'],'human_correct':human_correct,'eliminated':eliminated,'eliminated_names':[state['spectators'][x]['name'] for x in eliminated if x in state['spectators']],'remaining_names':[r['name'] for r in state['players'].values()],'remaining_count':len(state['players']),'round_no':state['question_no'],'bot_reactions':bot_reactions})
-        await asyncio.sleep(4)
     if len(state['players'])==1:
         pid,rec=next(iter(state['players'].items())); state['winner']=rec['name']
     else: state['winner']='本場無冠軍'
@@ -259,23 +281,53 @@ body{margin:0;min-height:100vh;background:#01040c;color:#fff;font-family:system-
 button,input,select{touch-action:manipulation}
 </style><style id="art-final">
 html,body{margin:0;background:#020611;color:white;font-family:system-ui,"Noto Sans TC",sans-serif}.artWrap{width:min(100vw,520px);margin:auto;position:relative}.artLobby{position:relative;width:100%;aspect-ratio:941/1672;overflow:hidden;background:#06102a}.homeArt{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}.hot{position:absolute;z-index:5;border:0;background:transparent;color:transparent;cursor:pointer;touch-action:manipulation}.artName{position:absolute;z-index:6;left:22.7%;top:40.15%;width:48%;height:4.2%;border:0;outline:0;background:transparent;color:#101828;font-size:clamp(13px,3.8vw,19px);font-weight:700}.artName::placeholder{color:#777}.h4{left:4.5%;top:49.5%;width:21.5%;height:12.4%}.h8{left:27%;top:49.5%;width:21.5%;height:12.4%}.h12{left:50%;top:49.5%;width:21.5%;height:12.4%}.h16{left:73%;top:49.5%;width:22%;height:12.4%}.livePlayer{left:4%;top:66.1%;width:44%;height:6.8%}.liveAudience{left:51%;top:66.1%;width:44%;height:6.8%}.installHot{left:4%;top:73.4%;width:44%;height:5.8%}.soundHot{left:51%;top:73.4%;width:44%;height:5.8%}.loginHot{left:2%;top:2%;width:20%;height:5%}.artStatus{margin:0!important;border-radius:0!important;background:#050b18!important}.gameStage{position:relative;min-height:100vh;background:linear-gradient(#06112bdf,#07102aee),url('/show-art.jpg') center top/cover fixed!important}.gameArt{position:absolute;inset:0;z-index:-1;background:url('/show-art.jpg') center top/cover no-repeat;opacity:.58}.questionLED{backdrop-filter:blur(8px);background:#061b45e8!important;border-color:#ffd85b!important}.opt{font-size:16px!important;min-height:54px}.hide{display:none!important}
+</style><style id="responsive-controls-v14">
+.responsiveLobby{width:100%;max-width:520px;margin:0 auto;background:#050a18;color:#fff;overflow:hidden;border-radius:0 0 24px 24px;box-shadow:0 15px 45px #000}
+.visualHero{position:relative;width:100%;height:min(54vh,510px);min-height:380px;overflow:hidden;background:#05091b}
+.visualHero .homeArt{display:block;width:100%;height:100%;object-fit:cover;object-position:center 9%;pointer-events:none;user-select:none}
+.heroShade{position:absolute;inset:0;background:linear-gradient(180deg,transparent 65%,#050a18 100%);pointer-events:none}
+.controlDeck{position:relative;margin-top:-18px;padding:8px 14px 18px;background:linear-gradient(180deg,#050a18 0,#091b3d 48%,#070a18 100%);border-top:1px solid #ffd65b55}
+.controlTitle{text-align:center;margin-bottom:10px}.controlTitle small{display:block;color:#66e8ff;font-size:9px;letter-spacing:3px}.controlTitle b{font-size:22px;color:#ffe173;text-shadow:0 0 15px #ffc62f88}
+.realName{display:block;padding:9px 11px 11px;border:1px solid #66e5ff66;border-radius:15px;background:#07142be8;box-shadow:inset 0 1px #ffffff22}.realName span{display:block;margin-bottom:6px;font-size:12px;font-weight:900;color:#bcefff}.realName input{display:block;width:100%;height:48px;padding:0 14px;border:2px solid #ffd65b;border-radius:12px;outline:0;background:#fff;color:#111827;font-size:17px;font-weight:800;box-shadow:0 0 15px #ffd65b44;-webkit-appearance:none}.realName input::placeholder{color:#737b8a}
+.modeTitle,.liveTitle{text-align:center;margin:12px 0 7px;color:#d8f7ff;font-size:13px;font-weight:900;letter-spacing:1px}.realModes{display:grid;grid-template-columns:1fr 1fr;gap:8px}.modeBtn{position:relative;display:grid;grid-template-columns:45px 1fr;align-items:center;min-height:76px;padding:9px;border:1px solid #55dfff88;border-radius:15px;background:linear-gradient(145deg,#123f7e,#111a4d 55%,#361467);color:#fff;text-align:left;box-shadow:inset 0 1px #ffffff4a,0 7px 15px #0008;touch-action:manipulation}.modeBtn>strong{font-size:31px;color:#ffe06d;text-shadow:0 3px #7a4300,0 0 12px #ffc22f}.modeBtn span b,.modeBtn span small{display:block}.modeBtn span b{font-size:13px}.modeBtn span small{margin-top:3px;font-size:9px;color:#aee9ff}.modeBtn.featured{border-color:#ffd65b;box-shadow:0 0 18px #ffc82f55,inset 0 1px #fff7bd}.modeBtn em{position:absolute;right:0;top:0;padding:2px 7px;border-radius:0 14px 0 8px;background:#ffd65b;color:#3b2100;font-size:8px;font-style:normal;font-weight:1000}
+.realLive{display:grid;grid-template-columns:1fr 1fr;gap:8px}.realLive button,.installReal,.soundReal{min-height:48px;border-radius:13px;color:#fff;font-size:14px;font-weight:900;touch-action:manipulation}.realLive button{border:1px solid #ffd65b77;background:linear-gradient(#e8a62b,#9c4e09)}.realLive button+button{border-color:#8edfff77;background:linear-gradient(#6749bd,#2d236b)}.installReal{display:block;width:100%;margin-top:10px;border:2px solid #ffd65b;background:linear-gradient(135deg,#ffe36a,#e59616);color:#392000;font-size:16px;box-shadow:0 0 18px #ffc52f55}.soundReal{display:block;width:100%;margin-top:7px;border:1px solid #55dfff66;background:linear-gradient(135deg,#123e78,#271660)}.installHelp{margin-top:8px;padding:10px;border-radius:10px;background:#fff4c9;color:#422d00;font-size:12px;line-height:1.45}.installHelp.hide{display:none}
+.avatarStudio{margin-top:9px;padding:10px;border:1px solid #73e9ff55;border-radius:16px;background:linear-gradient(145deg,#07162ed9,#251353d9)}.avatarTitle{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px;font-weight:900;color:#ffe47c}.avatarTitle small{font-size:10px;color:#8cecff}.avatarChoices,.styleChoices{display:grid;grid-template-columns:1fr 1fr;gap:7px}.avatarChoices button,.styleChoices button,.uploadBtn{min-height:43px;border:1px solid #70ddff66;border-radius:12px;background:#102d64;color:#fff;font-weight:900}.avatarChoices button.active,.styleChoices button.active{border-color:#ffe06a;background:linear-gradient(#c78319,#77400a);box-shadow:0 0 14px #ffc73555}.avatarPreview{display:flex;align-items:center;gap:10px;margin:9px 0;padding:8px;border-radius:13px;background:#030a1d99}.avatarFace{width:70px;height:70px;display:grid;place-items:center;overflow:hidden;border:3px solid #ffd85b;border-radius:50%;background:radial-gradient(circle,#4b8bd4,#131d4a);font-size:42px;box-shadow:0 0 18px #ffd85b55}.avatarFace img{width:100%;height:100%;object-fit:cover}.avatarBody{font-size:44px;filter:drop-shadow(0 5px 4px #000)}.uploadBtn{display:block;width:100%;padding:10px;text-align:center;box-sizing:border-box}.uploadBtn input{display:none}.privacyNote{margin:6px 0 0;color:#9ec8e8;font-size:10px}.answerReveal{position:fixed;inset:0;z-index:108;display:none;align-items:center;justify-content:center;padding:18px;background:radial-gradient(circle at 50% 20%,#173c80f5,#02040bfa)}.answerReveal.show{display:flex}.answerCard{width:min(88vw,390px);padding:24px 18px;border:2px solid #ffd75d;border-radius:24px;background:linear-gradient(165deg,#123466,#160d3c);box-shadow:0 0 55px #ffc63255;text-align:center;animation:cardIn .45s ease-out}.answerCard small{color:#7eeaff;letter-spacing:3px}.answerCard h2{margin:8px 0;color:#8dff9d;font-size:26px}.answerCard p{margin:12px 0 0;padding:12px;border-radius:14px;background:#ffffff10;font-size:16px;line-height:1.65;text-align:left}.answerCard .readbar{height:5px;margin-top:16px;border-radius:9px;background:linear-gradient(90deg,#ffd85b,#68eaff);animation:readbar 6.5s linear forwards}.pseat .avatar img{width:38px;height:38px;object-fit:cover;border:2px solid #ffd85b;border-radius:50%}@keyframes cardIn{from{transform:scale(.72) translateY(30px);opacity:0}}@keyframes readbar{from{width:0}to{width:100%}}
+@media(min-width:700px){.visualHero{height:560px}.controlDeck{padding-left:24px;padding-right:24px}}
+@media(max-height:700px){.visualHero{height:430px;min-height:330px}}
 </style></head><body class="artBody">
 <div id="flash" class="flash"></div><div id="confetti" class="confetti"></div>
 <div id="judgeOverlay" class="judgeOverlay"><div class="judgeCore"><small>CENTRAL JUDGEMENT</small><b>中央判定</b><strong id="judgeNum">3</strong><em>答案即將揭曉</em></div></div>
+<div id="answerReveal" class="answerReveal"><div class="answerCard"><small>正確答案揭曉</small><h2 id="answerTitle">A　答案</h2><p id="answerWhy">原因說明</p><div class="readbar"></div></div></div>
 <div id="overlay" class="overlay"><div class="resultStage"><div id="ovmain" class="ovmain">晉級！</div><div id="ovsmall" class="ovsmall">下一題準備中</div></div></div>
 <main class="artWrap">
-<section id="join" class="artLobby">
- <img class="homeArt" src="/stage-art.png" alt="鹹魚翻身豪華攝影棚">
- <div class="hot loginHot"><span>未登入</span></div>
- <input id="name" class="artName" placeholder="輸入你的舞台暱稱..." maxlength="12">
- <button class="single hot h4" data-total="4" aria-label="4人挑戰"></button>
- <button class="single hot h8" data-total="8" aria-label="8人標準賽"></button>
- <button class="single hot h12" data-total="12" aria-label="12人高手賽"></button>
- <button class="single hot h16" data-total="16" aria-label="16人巔峰賽"></button>
- <button class="hot livePlayer" data-role="player" aria-label="我要參賽"></button>
- <button class="hot liveAudience" data-role="spectator" aria-label="我要當觀眾"></button>
- <button id="install" class="hot installHot" aria-label="加入桌面"></button>
- <button id="sound" class="hot soundHot" aria-label="音樂與音效"></button>
+<section id="join" class="responsiveLobby">
+ <div class="visualHero">
+   <img class="homeArt" src="/stage-art.png" alt="鹹魚翻身豪華攝影棚">
+   <div class="heroShade"></div>
+ </div>
+ <div class="controlDeck">
+   <div class="controlTitle"><small>PLAYER ENTRY</small><b>登上智慧王舞台</b></div>
+   <label class="realName"><span>🎤 參賽暱稱</span><input id="name" placeholder="輸入你的舞台暱稱" maxlength="12" inputmode="text" autocomplete="off"></label>
+   <div class="avatarStudio">
+     <div class="avatarTitle"><span>選擇參賽形象</span><small>照片只留在本機</small></div>
+     <div class="avatarChoices"><button id="usePreset" class="active">內建Q版</button><button id="usePhoto">真人照片</button></div>
+     <div class="avatarPreview"><div id="avatarFace" class="avatarFace">🧑🏻</div><div id="avatarBody" class="avatarBody">🤵🏻</div><div><b id="avatarLabel">男仕舞台裝</b><div class="privacyNote">答對會亮燈，晉級會升級裝備</div></div></div>
+     <label id="uploadBtn" class="uploadBtn hide">📷 選擇真人照片<input id="avatarFile" type="file" accept="image/*"></label>
+     <div class="styleChoices"><button id="maleStyle" class="active">男仕造型</button><button id="femaleStyle">女仕造型</button></div>
+   </div>
+   <div class="modeTitle">選擇挑戰規模</div>
+   <div class="realModes">
+     <button class="single modeBtn" data-total="4"><strong>4</strong><span><b>4人挑戰</b><small>你＋3位對手</small></span></button>
+     <button class="single modeBtn featured" data-total="8"><em>推薦</em><strong>8</strong><span><b>8人標準賽</b><small>你＋7位對手</small></span></button>
+     <button class="single modeBtn" data-total="12"><strong>12</strong><span><b>12人高手賽</b><small>拉鋸戰升溫</small></span></button>
+     <button class="single modeBtn" data-total="16"><strong>16</strong><span><b>16人巔峰賽</b><small>最長線挑戰</small></span></button>
+   </div>
+   <div class="liveTitle">真人多人連線</div>
+   <div class="realLive"><button data-role="player">🎤 我要參賽</button><button data-role="spectator">🎟️ 我要當觀眾</button></div>
+   <button id="install" class="installReal">📲 一鍵加入手機桌面</button>
+   <button id="sound" class="soundReal">🎵 音樂＋音效：開</button>
+   <div id="installHelp" class="installHelp hide">Chrome若沒有跳出安裝視窗：請點右上角 ⋮ →「加到主畫面」或「安裝應用程式」。</div>
+ </div>
 </section>
 <section class="statusBar artStatus"><span>🏆 選手 <b id="pc">0</b></span><b id="role">尚未進場</b><span>👏 觀眾 <b id="sc">0</b></span></section>
 <section id="game" class="gameStage hide">
@@ -287,7 +339,7 @@ html,body{margin:0;background:#020611;color:white;font-family:system-ui,"Noto Sa
 <div id="msg" class="announcer">🎙️ 歡迎來到《鹹魚翻身》！準備接受今晚的智慧挑戰。</div>
 <section id="admin" class="admin"><details><summary>⚙️ 測試中央台</summary><div class="adminBody"><div class="row"><input id="secs" type="number" value="60"><input id="minp" type="number" value="2"></div><div class="row"><input id="maxp" type="number" value="100"><select id="choices"><option value="4">四選一</option><option value="3">三選一</option></select></div><div class="row"><button id="savecfg">儲存設定</button><button id="start">開始測試</button></div></div></details></section>
 </main><script>
-let ws=null,sendQueue=[],role='',deadline=0,phase='lobby',answered=false,pendingSingle=0,soundOn=true,deferredPrompt=null,bgmCtx=null,bgmTimer=null,bgmStep=0;
+let ws=null,sendQueue=[],role='',deadline=0,phase='lobby',answered=false,pendingSingle=0,soundOn=true,deferredPrompt=null,bgmCtx=null,bgmTimer=null,bgmStep=0,avatarMode='preset',avatarStyle='male',avatarData='';
 function connectWS(){if(ws&&(ws.readyState===WebSocket.OPEN||ws.readyState===WebSocket.CONNECTING))return;ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws');ws.onopen=()=>{let q=sendQueue.splice(0);q.forEach(o=>ws.send(JSON.stringify(o)))};ws.onclose=()=>setTimeout(connectWS,900);ws.onerror=()=>{};ws.onmessage=handleMessage;}
 function ensureBGM(){if(!soundOn)return;let A=window.AudioContext||window.webkitAudioContext;if(!A)return;if(!bgmCtx)bgmCtx=new A();if(bgmCtx.state==='suspended')bgmCtx.resume();if(bgmTimer)return;bgmTimer=setInterval(()=>{if(!soundOn||!bgmCtx)return;let notes=phase==='question'?[196,220,247,220,174,196,220,247]:[131,165,196,247,196,165,147,196],f=notes[bgmStep++%notes.length],o=bgmCtx.createOscillator(),g=bgmCtx.createGain();o.type='triangle';o.frequency.value=f;g.gain.setValueAtTime(.001,bgmCtx.currentTime);g.gain.exponentialRampToValueAtTime(.018,bgmCtx.currentTime+.03);g.gain.exponentialRampToValueAtTime(.001,bgmCtx.currentTime+.42);o.connect(g);g.connect(bgmCtx.destination);o.start();o.stop(bgmCtx.currentTime+.45)},480);}
 
@@ -296,22 +348,24 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catc
 function speak(t){if(!soundOn||!('speechSynthesis'in window))return; speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(t);u.lang='zh-TW';u.rate=.96;u.pitch=1.05;speechSynthesis.speak(u)}
 function cheer(big=false){if(!soundOn)return;let A=window.AudioContext||window.webkitAudioContext;if(!A)return;let c=new A(),count=big?8:3;for(let i=0;i<count;i++){let o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type=i%2?'triangle':'sine';o.frequency.value=(big?430:620)+i*72;g.gain.setValueAtTime(.001,c.currentTime+i*.025);g.gain.exponentialRampToValueAtTime(big?.10:.065,c.currentTime+.05+i*.025);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+(big?1.35:.65));o.start(c.currentTime+i*.025);o.stop(c.currentTime+(big?1.4:.7));}}
 
-const $=id=>document.getElementById(id);function send(o){if(ws&&ws.readyState===WebSocket.OPEN){ws.send(JSON.stringify(o));return}sendQueue.push(o);connectWS();}document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>{let n=$('name').value.trim();if(!n)return alert('請輸入暱稱');send({type:'join',name:n,role:b.dataset.role});$('join').classList.add('hide')});document.querySelectorAll('.single').forEach(b=>b.onclick=()=>{let n=$('name').value.trim();if(!n)return alert('請輸入暱稱');pendingSingle=+b.dataset.total;send({type:'join',name:n,role:'player'});$('join').classList.add('hide')});
+const $=id=>document.getElementById(id);function send(o){if(ws&&ws.readyState===WebSocket.OPEN){ws.send(JSON.stringify(o));return}sendQueue.push(o);connectWS();}function setAvatarMode(mode){avatarMode=mode;$('usePreset').classList.toggle('active',mode==='preset');$('usePhoto').classList.toggle('active',mode==='photo');$('uploadBtn').classList.toggle('hide',mode!=='photo');if(mode==='preset'){avatarData='';renderAvatar();}}function setAvatarStyle(style){avatarStyle=style;$('maleStyle').classList.toggle('active',style==='male');$('femaleStyle').classList.toggle('active',style==='female');renderAvatar();}function renderAvatar(){if(avatarMode==='photo'&&avatarData){$('avatarFace').innerHTML='<img src="'+avatarData+'" alt="我的頭像">';}else{$('avatarFace').textContent=avatarStyle==='male'?'🧑🏻':'👩🏻';}$('avatarBody').textContent=avatarStyle==='male'?'🤵🏻':'👗';$('avatarLabel').textContent=avatarStyle==='male'?'男仕舞台裝':'女仕舞台裝';}function humanAvatar(){return avatarMode==='photo'&&avatarData?'<img src="'+avatarData+'" alt="玩家頭像">':(avatarStyle==='male'?'🧑🏻‍💼':'👩🏻‍💼');}$('usePreset').onclick=()=>setAvatarMode('preset');$('usePhoto').onclick=()=>setAvatarMode('photo');$('maleStyle').onclick=()=>setAvatarStyle('male');$('femaleStyle').onclick=()=>setAvatarStyle('female');$('avatarFile').onchange=e=>{let f=e.target.files&&e.target.files[0];if(!f)return;if(f.size>8*1024*1024)return alert('照片請小於8MB');let rd=new FileReader();rd.onload=()=>{avatarData=rd.result;avatarMode='photo';renderAvatar();};rd.readAsDataURL(f);};document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>{let n=$('name').value.trim();if(!n)return alert('請輸入暱稱');send({type:'join',name:n,role:b.dataset.role});$('join').classList.add('hide')});document.querySelectorAll('.single').forEach(b=>b.onclick=()=>{let n=$('name').value.trim();if(!n)return alert('請輸入暱稱');pendingSingle=+b.dataset.total;send({type:'join',name:n,role:'player'});$('join').classList.add('hide')});
 $('sound').onclick=()=>{soundOn=!soundOn;$('sound').textContent=soundOn?'🎵 音樂＋音效：開':'🔇 音樂＋音效：關';if(soundOn)ensureBGM();else if(bgmTimer){clearInterval(bgmTimer);bgmTimer=null;}};document.addEventListener('pointerdown',ensureBGM,{once:true});
-$('install').onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null}else alert('若沒有跳出安裝視窗，請用瀏覽器選單的「加到主畫面／加入主畫面」。')};
+$('install').onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();let c=await deferredPrompt.userChoice;deferredPrompt=null;if(c&&c.outcome==='accepted')$('install').textContent='✅ 已加入／正在安裝';}else{$('installHelp').classList.remove('hide');$('installHelp').scrollIntoView({behavior:'smooth',block:'nearest'});}};
 $('savecfg').onclick=()=>send({type:'admin_config',admin:'fishboss',seconds:+$('secs').value||20,min_players:+$('minp').value||1,max_players:+$('maxp').value||100,choices:+$('choices').value||4});$('start').onclick=()=>{ $('savecfg').click(); setTimeout(()=>send({type:'start',admin:'fishboss',seconds:+$('secs').value||20}),100)};$('giveup').onclick=()=>{if(confirm('確定放棄本場比賽並轉為觀眾？'))send({type:'giveup'})};
 function handleMessage(e){let d=JSON.parse(e.data);if(d.type==='joined'){role=d.role;$('role').textContent=role==='player'?'身分：正式參賽者':'身分：觀眾';if(pendingSingle){let t=pendingSingle;pendingSingle=0;send({type:'single_start',total:t});speak('歡迎來到鹹魚翻身益智猜謎大挑戰，單人挑戰正式開始');}}
 if(d.type==='state'){phase=d.phase;deadline=d.deadline;$('pc').textContent=d.player_count;$('sc').textContent=d.spectator_count;
-if($('playerdeck')&&d.contestants){$('playerdeck').innerHTML=d.contestants.map(x=>'<div class="pseat '+(x.bot?'':'human')+'"><div class="avatar">'+(x.bot?'🎭':'👤')+'</div><b>'+x.name+'</b><small>'+x.look+'</small></div>').join('');}if($('banter')&&d.contestants){let bs=d.contestants.filter(x=>x.bot&&x.intro);if(bs.length){let x=bs[Math.floor(Math.random()*bs.length)];$('banter').textContent='🎭 '+x.name+'：「'+x.intro+'」';}}if(d.phase==='question'){answered=false;$('game').classList.remove('hide');$('cat').textContent=d.question.cat;$('q').textContent=d.question.q;$('opts').innerHTML='';d.question.opts.forEach((x,i)=>{let b=document.createElement('button');b.className='opt';b.textContent='ABCD'[i]+'　'+x;b.onclick=()=>{if(answered)return;answered=true;send({type:'answer',idx:i});b.style.outline='3px solid #ffd45b';$('msg').textContent=role==='player'?'答案已送出，等待中央判定':'觀眾答案已記錄，不影響正式比賽';};$('opts').appendChild(b)});$('giveup').style.display=role==='player'?'block':'none';$('msg').textContent='作答中…';}else if(d.phase==='finished'){if(role==='player'){cheer(true);speak('恭喜你成為本場總冠軍，全場為你歡呼');}else{speak('本場總冠軍誕生');}$('game').classList.add('hide');$('msg').innerHTML='<div class="winner">🎊🏆🎊<br><b>本場總冠軍</b><br><span style="color:#ffd45b;font-size:36px">'+d.winner+'</span><br>鹹魚翻身成功！<br><button class="btn" style="margin-top:14px" onclick="location.reload()">再玩一場</button></div>';} }
+if($('playerdeck')&&d.contestants){$('playerdeck').innerHTML=d.contestants.map(x=>'<div class="pseat '+(x.bot?'':'human')+'"><div class="avatar">'+(x.bot?'🎭':humanAvatar())+'</div><b>'+x.name+'</b><small>'+x.look+'</small></div>').join('');}if($('banter')&&d.contestants){let bs=d.contestants.filter(x=>x.bot&&x.intro);if(bs.length){let x=bs[Math.floor(Math.random()*bs.length)];$('banter').textContent='🎭 '+x.name+'：「'+x.intro+'」';}}if(d.phase==='question'){answered=false;$('game').classList.remove('hide');$('cat').textContent=d.question.cat;$('q').textContent=d.question.q;$('opts').innerHTML='';d.question.opts.forEach((x,i)=>{let b=document.createElement('button');b.className='opt';b.textContent='ABCD'[i]+'　'+x;b.onclick=()=>{if(answered)return;answered=true;send({type:'answer',idx:i});b.style.outline='3px solid #ffd45b';$('msg').textContent=role==='player'?'答案已鎖定，等待中央判定':'答案已記錄';};$('opts').appendChild(b)});$('giveup').style.display=role==='player'?'block':'none';$('msg').textContent='作答中…';}else if(d.phase==='finished'){if(role==='player'){cheer(true);speak('恭喜你成為本場總冠軍，全場為你歡呼');}else{speak('本場總冠軍誕生');}$('game').classList.add('hide');$('msg').innerHTML='<div class="winner">🎊🏆🎊<br><b>本場總冠軍</b><br><span style="color:#ffd45b;font-size:36px">'+d.winner+'</span><br>鹹魚翻身成功！<br><button class="btn" style="margin-top:14px" onclick="location.reload()">再玩一場</button></div>';} }
 if(d.type==='judging'){let n=3;$('judgeOverlay').classList.add('show');$('judgeNum').textContent=n;let jt=setInterval(()=>{n--;if(n<=0){clearInterval(jt);$('judgeOverlay').classList.remove('show');}else $('judgeNum').textContent=n;},1000);}
 if(d.type==='role_changed'){if(d.reason==='eliminated'){speak('哎呀，這一題可惜了，先到觀眾席繼續幫大家加油');}role=d.role;$('role').textContent='身分：觀眾';$('giveup').style.display='none';if(d.reason==='eliminated')$('msg').innerHTML='😂 <b>答錯或逾時！</b><br>你已掉到觀眾席，繼續陪大家玩！';else $('msg').innerHTML='👋 已放棄正式比賽，現在進入觀眾席。';}
 if(d.type==='cancelled'){$('msg').textContent='⚠️ '+d.text;}
 if(d.type==='round'){
- if(d.result==='all_wrong'){$('msg').innerHTML='😱 <b>本輪全員失手！</b><br><b style="color:#7feaff">正確答案：'+(d.correct_text||'已揭曉')+'</b><br>本題無人淘汰，所有選手繼續挑戰。';}
+ $('answerTitle').textContent='ABCD'[d.correct]+'　'+(d.correct_text||'已揭曉');$('answerWhy').textContent=d.explanation||'答案解析準備中';$('answerReveal').classList.add('show');speak('正確答案是'+('ABCD'[d.correct]||'') );setTimeout(()=>$('answerReveal').classList.remove('show'),6500);
+ document.querySelectorAll('#opts .opt').forEach((b,i)=>{b.disabled=true;if(i===d.correct){b.style.background='linear-gradient(145deg,#178743,#0b542b)';b.style.borderColor='#7dff9a';}else if(b.style.outline){b.style.background='linear-gradient(145deg,#842c3d,#4c1723)';}});
+ if(d.result==='all_wrong'){$('msg').innerHTML='😱 <b>本輪全員失手！</b><br><b style="color:#7feaff">正確答案：'+(d.correct_text||'已揭曉')+'</b><br>'+(d.explanation||'')+'<br>本題無人淘汰，所有選手繼續挑戰。';}
  else{
    if(d.human_correct){cheer(true);speak('漂亮！答對了！全場為你歡呼！');}
    let outs=(d.eliminated_names||[]),left=(d.remaining_names||[]);
-   $('msg').innerHTML='🎉 <b>本輪結算</b><br><b style="color:#7feaff">正確答案：'+(d.correct_text||'已揭曉')+'</b><br>淘汰 '+outs.length+' 人：'+(outs.length?outs.join('、'):'無')+'<br><b style="color:#ffd45b">剩餘 '+(d.remaining_count||left.length)+' 人</b>：'+left.join('、')+((d.bot_reactions||[]).length?'<br><span style="color:#e9c8ff">🎭 '+d.bot_reactions.join('　')+'</span>':'');$('ovmain').textContent=d.human_correct?'晉級！':(role==='player'?'本輪結算':'淘汰');$('ovsmall').textContent='淘汰 '+outs.length+' 人・剩餘 '+(d.remaining_count||left.length)+' 人';$('overlay').classList.add('show');setTimeout(()=>$('overlay').classList.remove('show'),3800);
+   $('msg').innerHTML='🎉 <b>本輪結算</b><br><b style="color:#7feaff">正確答案：'+(d.correct_text||'已揭曉')+'</b><br>淘汰 '+outs.length+' 人：'+(outs.length?outs.join('、'):'無')+'<br><b style="color:#ffd45b">剩餘 '+(d.remaining_count||left.length)+' 人</b>：'+left.join('、')+((d.bot_reactions||[]).length?'<br><span style="color:#e9c8ff">🎭 '+d.bot_reactions.join('　')+'</span>':'');$('ovmain').textContent=d.human_correct?'晉級！':(role==='player'?'本輪結算':'淘汰');$('ovsmall').textContent='淘汰 '+outs.length+' 人・剩餘 '+(d.remaining_count||left.length)+' 人';setTimeout(()=>{$('overlay').classList.add('show');setTimeout(()=>$('overlay').classList.remove('show'),1300);},6500);
  }
 }
 }
