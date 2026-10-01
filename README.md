@@ -1,8 +1,7 @@
-# 鹹魚翻身・益智猜謎大挑戰（測試版）
+# 鹹魚翻身・益智猜謎大挑戰 V8
 
-Render 部署：
-- Build Command: `pip install -r requirements.txt`
-- Start Command: `uvicorn app:app --host 0.0.0.0 --port $PORT`
-- Health Check: `/`
+部署：Render + FastAPI + WebSocket。
 
-包含：200題、多人 WebSocket、單人 4/8/12/16 人場、16名電腦角色、PWA桌面捷徑、主持/音效觸發。
+本版：4/8/12/16 單人模式、60 秒思考、作答後 3 秒判定、109 題成熟題庫、強弱 AI 對手、前 10 題拉鋸保護、淘汰/剩餘名單、高品質本地美術資產、真人多人連線骨架。
+
+啟動：`uvicorn app:app --host 0.0.0.0 --port $PORT`

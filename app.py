@@ -259,44 +259,23 @@ body{margin:0;min-height:100vh;background:#01040c;color:#fff;font-family:system-
 button,input,select{touch-action:manipulation}
 </style><style id="art-final">
 html,body{margin:0;background:#020611;color:white;font-family:system-ui,"Noto Sans TC",sans-serif}.artWrap{width:min(100vw,520px);margin:auto;position:relative}.artLobby{position:relative;width:100%;aspect-ratio:941/1672;overflow:hidden;background:#06102a}.homeArt{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}.hot{position:absolute;z-index:5;border:0;background:transparent;color:transparent;cursor:pointer;touch-action:manipulation}.artName{position:absolute;z-index:6;left:22.7%;top:40.15%;width:48%;height:4.2%;border:0;outline:0;background:transparent;color:#101828;font-size:clamp(13px,3.8vw,19px);font-weight:700}.artName::placeholder{color:#777}.h4{left:4.5%;top:49.5%;width:21.5%;height:12.4%}.h8{left:27%;top:49.5%;width:21.5%;height:12.4%}.h12{left:50%;top:49.5%;width:21.5%;height:12.4%}.h16{left:73%;top:49.5%;width:22%;height:12.4%}.livePlayer{left:4%;top:66.1%;width:44%;height:6.8%}.liveAudience{left:51%;top:66.1%;width:44%;height:6.8%}.installHot{left:4%;top:73.4%;width:44%;height:5.8%}.soundHot{left:51%;top:73.4%;width:44%;height:5.8%}.loginHot{left:2%;top:2%;width:20%;height:5%}.artStatus{margin:0!important;border-radius:0!important;background:#050b18!important}.gameStage{position:relative;min-height:100vh;background:linear-gradient(#06112bdf,#07102aee),url('/show-art.jpg') center top/cover fixed!important}.gameArt{position:absolute;inset:0;z-index:-1;background:url('/show-art.jpg') center top/cover no-repeat;opacity:.58}.questionLED{backdrop-filter:blur(8px);background:#061b45e8!important;border-color:#ffd85b!important}.opt{font-size:16px!important;min-height:54px}.hide{display:none!important}
-</style><style id="responsive-controls-v14">
-.responsiveLobby{width:100%;max-width:520px;margin:0 auto;background:#050a18;color:#fff;overflow:hidden;border-radius:0 0 24px 24px;box-shadow:0 15px 45px #000}
-.visualHero{position:relative;width:100%;height:min(54vh,510px);min-height:380px;overflow:hidden;background:#05091b}
-.visualHero .homeArt{display:block;width:100%;height:100%;object-fit:cover;object-position:center 9%;pointer-events:none;user-select:none}
-.heroShade{position:absolute;inset:0;background:linear-gradient(180deg,transparent 65%,#050a18 100%);pointer-events:none}
-.controlDeck{position:relative;margin-top:-18px;padding:8px 14px 18px;background:linear-gradient(180deg,#050a18 0,#091b3d 48%,#070a18 100%);border-top:1px solid #ffd65b55}
-.controlTitle{text-align:center;margin-bottom:10px}.controlTitle small{display:block;color:#66e8ff;font-size:9px;letter-spacing:3px}.controlTitle b{font-size:22px;color:#ffe173;text-shadow:0 0 15px #ffc62f88}
-.realName{display:block;padding:9px 11px 11px;border:1px solid #66e5ff66;border-radius:15px;background:#07142be8;box-shadow:inset 0 1px #ffffff22}.realName span{display:block;margin-bottom:6px;font-size:12px;font-weight:900;color:#bcefff}.realName input{display:block;width:100%;height:48px;padding:0 14px;border:2px solid #ffd65b;border-radius:12px;outline:0;background:#fff;color:#111827;font-size:17px;font-weight:800;box-shadow:0 0 15px #ffd65b44;-webkit-appearance:none}.realName input::placeholder{color:#737b8a}
-.modeTitle,.liveTitle{text-align:center;margin:12px 0 7px;color:#d8f7ff;font-size:13px;font-weight:900;letter-spacing:1px}.realModes{display:grid;grid-template-columns:1fr 1fr;gap:8px}.modeBtn{position:relative;display:grid;grid-template-columns:45px 1fr;align-items:center;min-height:76px;padding:9px;border:1px solid #55dfff88;border-radius:15px;background:linear-gradient(145deg,#123f7e,#111a4d 55%,#361467);color:#fff;text-align:left;box-shadow:inset 0 1px #ffffff4a,0 7px 15px #0008;touch-action:manipulation}.modeBtn>strong{font-size:31px;color:#ffe06d;text-shadow:0 3px #7a4300,0 0 12px #ffc22f}.modeBtn span b,.modeBtn span small{display:block}.modeBtn span b{font-size:13px}.modeBtn span small{margin-top:3px;font-size:9px;color:#aee9ff}.modeBtn.featured{border-color:#ffd65b;box-shadow:0 0 18px #ffc82f55,inset 0 1px #fff7bd}.modeBtn em{position:absolute;right:0;top:0;padding:2px 7px;border-radius:0 14px 0 8px;background:#ffd65b;color:#3b2100;font-size:8px;font-style:normal;font-weight:1000}
-.realLive{display:grid;grid-template-columns:1fr 1fr;gap:8px}.realLive button,.installReal,.soundReal{min-height:48px;border-radius:13px;color:#fff;font-size:14px;font-weight:900;touch-action:manipulation}.realLive button{border:1px solid #ffd65b77;background:linear-gradient(#e8a62b,#9c4e09)}.realLive button+button{border-color:#8edfff77;background:linear-gradient(#6749bd,#2d236b)}.installReal{display:block;width:100%;margin-top:10px;border:2px solid #ffd65b;background:linear-gradient(135deg,#ffe36a,#e59616);color:#392000;font-size:16px;box-shadow:0 0 18px #ffc52f55}.soundReal{display:block;width:100%;margin-top:7px;border:1px solid #55dfff66;background:linear-gradient(135deg,#123e78,#271660)}.installHelp{margin-top:8px;padding:10px;border-radius:10px;background:#fff4c9;color:#422d00;font-size:12px;line-height:1.45}.installHelp.hide{display:none}
-@media(min-width:700px){.visualHero{height:560px}.controlDeck{padding-left:24px;padding-right:24px}}
-@media(max-height:700px){.visualHero{height:430px;min-height:330px}}
 </style></head><body class="artBody">
 <div id="flash" class="flash"></div><div id="confetti" class="confetti"></div>
 <div id="judgeOverlay" class="judgeOverlay"><div class="judgeCore"><small>CENTRAL JUDGEMENT</small><b>中央判定</b><strong id="judgeNum">3</strong><em>答案即將揭曉</em></div></div>
 <div id="overlay" class="overlay"><div class="resultStage"><div id="ovmain" class="ovmain">晉級！</div><div id="ovsmall" class="ovsmall">下一題準備中</div></div></div>
 <main class="artWrap">
-<section id="join" class="responsiveLobby">
- <div class="visualHero">
-   <img class="homeArt" src="/stage-art.png" alt="鹹魚翻身豪華攝影棚">
-   <div class="heroShade"></div>
- </div>
- <div class="controlDeck">
-   <div class="controlTitle"><small>PLAYER ENTRY</small><b>登上智慧王舞台</b></div>
-   <label class="realName"><span>🎤 參賽暱稱</span><input id="name" placeholder="輸入你的舞台暱稱" maxlength="12" inputmode="text" autocomplete="off"></label>
-   <div class="modeTitle">選擇挑戰規模</div>
-   <div class="realModes">
-     <button class="single modeBtn" data-total="4"><strong>4</strong><span><b>4人挑戰</b><small>你＋3位對手</small></span></button>
-     <button class="single modeBtn featured" data-total="8"><em>推薦</em><strong>8</strong><span><b>8人標準賽</b><small>你＋7位對手</small></span></button>
-     <button class="single modeBtn" data-total="12"><strong>12</strong><span><b>12人高手賽</b><small>拉鋸戰升溫</small></span></button>
-     <button class="single modeBtn" data-total="16"><strong>16</strong><span><b>16人巔峰賽</b><small>最長線挑戰</small></span></button>
-   </div>
-   <div class="liveTitle">真人多人連線</div>
-   <div class="realLive"><button data-role="player">🎤 我要參賽</button><button data-role="spectator">🎟️ 我要當觀眾</button></div>
-   <button id="install" class="installReal">📲 一鍵加入手機桌面</button>
-   <button id="sound" class="soundReal">🎵 音樂＋音效：開</button>
-   <div id="installHelp" class="installHelp hide">Chrome若沒有跳出安裝視窗：請點右上角 ⋮ →「加到主畫面」或「安裝應用程式」。</div>
- </div>
+<section id="join" class="artLobby">
+ <img class="homeArt" src="/stage-art.png" alt="鹹魚翻身豪華攝影棚">
+ <div class="hot loginHot"><span>未登入</span></div>
+ <input id="name" class="artName" placeholder="輸入你的舞台暱稱..." maxlength="12">
+ <button class="single hot h4" data-total="4" aria-label="4人挑戰"></button>
+ <button class="single hot h8" data-total="8" aria-label="8人標準賽"></button>
+ <button class="single hot h12" data-total="12" aria-label="12人高手賽"></button>
+ <button class="single hot h16" data-total="16" aria-label="16人巔峰賽"></button>
+ <button class="hot livePlayer" data-role="player" aria-label="我要參賽"></button>
+ <button class="hot liveAudience" data-role="spectator" aria-label="我要當觀眾"></button>
+ <button id="install" class="hot installHot" aria-label="加入桌面"></button>
+ <button id="sound" class="hot soundHot" aria-label="音樂與音效"></button>
 </section>
 <section class="statusBar artStatus"><span>🏆 選手 <b id="pc">0</b></span><b id="role">尚未進場</b><span>👏 觀眾 <b id="sc">0</b></span></section>
 <section id="game" class="gameStage hide">
@@ -319,7 +298,7 @@ function cheer(big=false){if(!soundOn)return;let A=window.AudioContext||window.w
 
 const $=id=>document.getElementById(id);function send(o){if(ws&&ws.readyState===WebSocket.OPEN){ws.send(JSON.stringify(o));return}sendQueue.push(o);connectWS();}document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>{let n=$('name').value.trim();if(!n)return alert('請輸入暱稱');send({type:'join',name:n,role:b.dataset.role});$('join').classList.add('hide')});document.querySelectorAll('.single').forEach(b=>b.onclick=()=>{let n=$('name').value.trim();if(!n)return alert('請輸入暱稱');pendingSingle=+b.dataset.total;send({type:'join',name:n,role:'player'});$('join').classList.add('hide')});
 $('sound').onclick=()=>{soundOn=!soundOn;$('sound').textContent=soundOn?'🎵 音樂＋音效：開':'🔇 音樂＋音效：關';if(soundOn)ensureBGM();else if(bgmTimer){clearInterval(bgmTimer);bgmTimer=null;}};document.addEventListener('pointerdown',ensureBGM,{once:true});
-$('install').onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();let c=await deferredPrompt.userChoice;deferredPrompt=null;if(c&&c.outcome==='accepted')$('install').textContent='✅ 已加入／正在安裝';}else{$('installHelp').classList.remove('hide');$('installHelp').scrollIntoView({behavior:'smooth',block:'nearest'});}};
+$('install').onclick=async()=>{if(deferredPrompt){deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null}else alert('若沒有跳出安裝視窗，請用瀏覽器選單的「加到主畫面／加入主畫面」。')};
 $('savecfg').onclick=()=>send({type:'admin_config',admin:'fishboss',seconds:+$('secs').value||20,min_players:+$('minp').value||1,max_players:+$('maxp').value||100,choices:+$('choices').value||4});$('start').onclick=()=>{ $('savecfg').click(); setTimeout(()=>send({type:'start',admin:'fishboss',seconds:+$('secs').value||20}),100)};$('giveup').onclick=()=>{if(confirm('確定放棄本場比賽並轉為觀眾？'))send({type:'giveup'})};
 function handleMessage(e){let d=JSON.parse(e.data);if(d.type==='joined'){role=d.role;$('role').textContent=role==='player'?'身分：正式參賽者':'身分：觀眾';if(pendingSingle){let t=pendingSingle;pendingSingle=0;send({type:'single_start',total:t});speak('歡迎來到鹹魚翻身益智猜謎大挑戰，單人挑戰正式開始');}}
 if(d.type==='state'){phase=d.phase;deadline=d.deadline;$('pc').textContent=d.player_count;$('sc').textContent=d.spectator_count;
