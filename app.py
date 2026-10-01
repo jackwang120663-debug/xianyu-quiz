@@ -4,7 +4,7 @@ import asyncio, json, random, time
 
 app=FastAPI(title='鹹魚翻身測試版')
 clients={}
-state={'phase':'lobby','question_no':0,'question':None,'deadline':0,'players':{},'spectators':{},'answers':{},'winner':None,'single_answer_event':None,'config':{'seconds':20,'min_players':2,'max_players':100,'choices':4}}
+state={'phase':'lobby','question_no':0,'question':None,'deadline':0,'players':{},'spectators':{},'answers':{},'winner':None,'single_answer_event':None,'run_id':0,'config':{'seconds':20,'min_players':2,'max_players':100,'choices':4}}
 BOT_CATALOG=[
  {'name':'阿發哥','look':'男・中年・華麗天王型','skill':.91,'persona':'臭屁型','intro':['今天冠軍我先預訂了啦！','你們慢慢想，我先準備領獎。'],'win':['這題也要想？','下一題來吧！'],'out':['蛤？這題有問題吧！','今天手氣不好啦！']},
  {'name':'美鳳姨','look':'女・熟齡・台味大姊型','skill':.77,'persona':'霸氣型','intro':['弟弟妹妹，不要小看阿姨喔！','阿姨今天可是有備而來。'],'win':['我就說我還可以吧！'],'out':['唉唷！差一點啦！']},
@@ -82,9 +82,12 @@ async def icon():
 
 
 def reset_match():
+    old_event=state.get('single_answer_event')
+    state['run_id']=state.get('run_id',0)+1
     state.update(phase='lobby',question_no=0,question=None,deadline=0,players={},spectators={},answers={},winner=None,single_answer_event=None)
     state['single_mode']=False
     state['bots']={}
+    if old_event: old_event.set()
 
 @app.websocket('/ws')
 async def ws_endpoint(ws:WebSocket):
@@ -110,6 +113,7 @@ async def ws_endpoint(ws:WebSocket):
                 total=max(4,min(16,int(d.get('total',8))))
                 if total not in (4,8,12,16): total=8
                 human=state['players'].get(pid) or state['spectators'].get(pid) or {'name':meta.get('name','玩家'),'alive':True,'correct':0,'answered':0}
+                state['run_id']=state.get('run_id',0)+1
                 used.clear(); state['players']={pid:{**human,'alive':True,'correct':0,'answered':0}}; state['spectators']={}; state['bots']={}; state['single_mode']=True; state['single_answer_event']=asyncio.Event(); state['question_no']=0; state['winner']=None
                 meta['role']='player'
                 for i,bot in enumerate(random.sample(BOT_CATALOG,total-1),1):
@@ -129,6 +133,11 @@ async def ws_endpoint(ws:WebSocket):
                     if rec: rec['answered']+=1
                     if state.get('single_mode') and rec and not rec.get('bot') and state.get('single_answer_event'):
                         state['single_answer_event'].set()
+            elif typ=='exit_single' and meta.get('pid'):
+                if state.get('single_mode'):
+                    reset_match()
+                    await broadcast(public_state())
+                await ws.send_text(json.dumps({'type':'returned_home'},ensure_ascii=False))
             elif typ=='admin_config' and d.get('admin')=='fishboss' and state['phase']=='lobby':
                 state['config']['seconds']=max(5,min(120,int(d.get('seconds',20))))
                 state['config']['min_players']=max(1,min(100,int(d.get('min_players',2))))
@@ -144,12 +153,15 @@ async def ws_endpoint(ws:WebSocket):
         m=clients.pop(ws,None)
         if m and m.get('pid'):
             pid=m['pid']
+            was_single_human=state.get('single_mode') and (pid in state['players'] or pid in state['spectators'])
             state['spectators'].pop(pid,None)
             if pid in state['players'] and not state['players'][pid].get('bot'):
                 state['players'].pop(pid,None)
                 if state.get('single_mode'):
                     state['phase']='finished'; state['winner']=None; state['question']=None; state['deadline']=0
                 if state.get('single_answer_event'): state['single_answer_event'].set()
+            if was_single_human:
+                reset_match()
         try: await broadcast(public_state())
         except: pass
 
@@ -158,8 +170,10 @@ async def run_game(seconds=20):
     if len(state['players']) < state['config']['min_players']:
         await broadcast({'type':'cancelled','text':'未達最低參加人數，本場取消'})
         return
+    run_id=state.get('run_id',0)
     state['phase']='question'; state['winner']=None
     while len(state['players'])>1:
+        if run_id!=state.get('run_id') or state['phase']=='lobby': return
         if state.get('single_mode') and not any(not r.get('bot') for r in state['players'].values()):
             state['phase']='finished'; state['winner']=None; state['question']=None; state['deadline']=0
             await broadcast(public_state()); return
@@ -198,6 +212,7 @@ async def run_game(seconds=20):
                 pass
         else:
             await asyncio.sleep(seconds)
+        if run_id!=state.get('run_id') or state['phase']=='lobby': return
         # score spectators
         for pid,rec in list(state['spectators'].items()):
             if pid in state['answers'] and state['answers'][pid]==correct_idx: rec['correct']+=1
@@ -236,6 +251,7 @@ async def run_game(seconds=20):
         if len(eliminated)==len(state['players']) and len(state['players'])>1:
             await broadcast({'type':'round','result':'all_wrong','correct':correct_idx,'correct_text':shown[correct_idx],'explanation':question_explanation(q),'category':q['cat'],'human_correct':human_correct,'eliminated_names':[],'remaining_names':[r['name'] for r in state['players'].values()],'remaining_count':len(state['players'])})
             await asyncio.sleep(12)
+            if run_id!=state.get('run_id') or state['phase']=='lobby': return
         else:
             bot_reactions=[]
             for pid,rec in list(state['players'].items()):
@@ -251,6 +267,7 @@ async def run_game(seconds=20):
                 if not rec.get('bot'): eliminated_humans.append(pid)
             await broadcast({'type':'round','result':'resolved','correct':correct_idx,'correct_text':shown[correct_idx],'explanation':question_explanation(q),'category':q['cat'],'human_correct':human_correct,'eliminated':eliminated,'eliminated_names':[state['spectators'][x]['name'] for x in eliminated if x in state['spectators']],'remaining_names':[r['name'] for r in state['players'].values()],'remaining_count':len(state['players']),'round_no':state['question_no'],'bot_reactions':bot_reactions})
             await asyncio.sleep(7)
+            if run_id!=state.get('run_id') or state['phase']=='lobby': return
             for pid in eliminated_humans:
                 for w,m in clients.items():
                     if m.get('pid')==pid:
@@ -354,6 +371,7 @@ function cheer(big=false){if(!soundOn)return;let A=window.AudioContext||window.w
 function showTV(title,sub='',kind='',kicker='鹹魚翻身・益智猜謎大挑戰',ms=2600){let el=$('tvTransition');clearTimeout(transitionTimer);el.className='tvTransition '+kind;void el.offsetWidth;$('tvKicker').textContent=kicker;$('tvTitle').textContent=title;$('tvSub').textContent=sub;el.classList.add('show');transitionTimer=setTimeout(()=>el.classList.remove('show'),ms)}
 function showBeat(title,sub='',kind=''){let el=$('showBeat');clearTimeout(beatTimer);el.className='showBeat '+kind;void el.offsetWidth;$('beatTitle').textContent=title;$('beatSub').textContent=sub;el.classList.add('show');beatTimer=setTimeout(()=>el.classList.remove('show'),2400)}
 function setFinalMood(n){$('game').classList.toggle('finalMood',n<=3);if(n===3&&lastRemaining>3)showTV('三強決戰','只剩最後三位・每一題都可能翻盤','gold','FINAL THREE',3000);if(n===2&&lastRemaining>2)showTV('冠軍對決','最後兩強・一題定江山','gold','HEAD TO HEAD',3200);lastRemaining=n}
+function exitSingle(){showBeat('正在退出本場','清除比賽並返回首頁','','');send({type:'exit_single'});setTimeout(()=>location.reload(),1200)}
 
 const $=id=>document.getElementById(id);function send(o){if(ws&&ws.readyState===WebSocket.OPEN){ws.send(JSON.stringify(o));return}sendQueue.push(o);connectWS();}function setAvatarMode(mode){avatarMode=mode;$('usePreset').classList.toggle('active',mode==='preset');$('usePhoto').classList.toggle('active',mode==='photo');$('uploadBtn').classList.toggle('hide',mode!=='photo');if(mode==='preset'){avatarData='';renderAvatar();}}function setAvatarStyle(style){avatarStyle=style;$('maleStyle').classList.toggle('active',style==='male');$('femaleStyle').classList.toggle('active',style==='female');renderAvatar();}function renderAvatar(){if(avatarMode==='photo'&&avatarData){$('avatarFace').innerHTML='<img src="'+avatarData+'" alt="我的頭像">';}else{$('avatarFace').textContent=avatarStyle==='male'?'🧑🏻':'👩🏻';}$('avatarBody').textContent=avatarStyle==='male'?'🤵🏻':'👗';$('avatarLabel').textContent=avatarStyle==='male'?'男仕舞台裝':'女仕舞台裝';}function humanAvatar(){return avatarMode==='photo'&&avatarData?'<img src="'+avatarData+'" alt="玩家頭像">':(avatarStyle==='male'?'🧑🏻‍💼':'👩🏻‍💼');}$('usePreset').onclick=()=>setAvatarMode('preset');$('usePhoto').onclick=()=>setAvatarMode('photo');$('maleStyle').onclick=()=>setAvatarStyle('male');$('femaleStyle').onclick=()=>setAvatarStyle('female');$('avatarFile').onchange=e=>{let f=e.target.files&&e.target.files[0];if(!f)return;if(f.size>8*1024*1024)return alert('照片請小於8MB');let rd=new FileReader();rd.onload=()=>{avatarData=rd.result;avatarMode='photo';renderAvatar();};rd.readAsDataURL(f);};document.querySelectorAll('[data-role]').forEach(b=>b.onclick=()=>{let n=$('name').value.trim();if(!n)return alert('請輸入暱稱');send({type:'join',name:n,role:b.dataset.role});$('join').classList.add('hide')});document.querySelectorAll('.single').forEach(b=>b.onclick=()=>{let n=$('name').value.trim();if(!n)return alert('請輸入暱稱');pendingSingle=+b.dataset.total;send({type:'join',name:n,role:'player'});$('join').classList.add('hide')});
 $('sound').onclick=()=>{soundOn=!soundOn;$('sound').textContent=soundOn?'🎵 音樂＋音效：開':'🔇 音樂＋音效：關';if(soundOn)ensureBGM();else if(bgmTimer){clearInterval(bgmTimer);bgmTimer=null;}};document.addEventListener('pointerdown',ensureBGM,{once:true});
@@ -363,7 +381,8 @@ function handleMessage(e){let d=JSON.parse(e.data);if(d.type==='joined'){role=d.
 if(d.type==='state'){phase=d.phase;deadline=d.deadline;$('pc').textContent=d.player_count;$('sc').textContent=d.spectator_count;
 if($('playerdeck')&&d.contestants){$('playerdeck').innerHTML=d.contestants.map(x=>'<div class="pseat '+(x.bot?'':'human')+'"><div class="avatar">'+(x.bot?'🎭':humanAvatar())+'</div><b>'+x.name+'</b><small>'+x.look+'</small></div>').join('');}if($('banter')&&d.contestants){let bs=d.contestants.filter(x=>x.bot&&x.intro);if(bs.length){let x=bs[Math.floor(Math.random()*bs.length)];$('banter').textContent='🎭 '+x.name+'：「'+x.intro+'」';}}if(d.phase==='question'){answered=false;lastTick=-1;$('game').classList.remove('dangerTime');if(d.question_no&&d.question_no!==lastQuestionNo){lastQuestionNo=d.question_no;let special=d.question_no%5===0;showTV(special?'關鍵第 '+d.question_no+' 題':'第 '+d.question_no+' 題',special?'難度升級・勝負即將改寫':'請選手準備・倒數即將開始',special?'gold':'','QUESTION '+String(d.question_no).padStart(2,'0'),special?3000:2200);}$('game').classList.remove('hide');$('cat').textContent=d.question.cat;$('q').textContent=d.question.q;$('opts').innerHTML='';d.question.opts.forEach((x,i)=>{let b=document.createElement('button');b.className='opt';b.textContent='ABCD'[i]+'　'+x;b.onclick=()=>{if(answered)return;answered=true;send({type:'answer',idx:i});b.style.outline='3px solid #ffd45b';showBeat('🔒 '+('ABCD'[i]||'')+' 答案鎖定','不能更改・等待中央判定','success');$('msg').textContent=role==='player'?'答案已鎖定，等待中央判定':'答案已記錄';};$('opts').appendChild(b)});$('giveup').style.display=role==='player'?'block':'none';$('msg').textContent='作答中…';}else if(d.phase==='finished'){showTV('冠軍誕生',d.winner+'・鹹魚翻身成功！','gold','GRAND CHAMPION',4200);if(role==='player'){cheer(true);speak('恭喜你成為本場總冠軍，全場為你歡呼');}else{speak('本場總冠軍誕生');}$('game').classList.add('hide');$('msg').innerHTML='<div class="winner">🎊🏆🎊<br><b>本場總冠軍</b><br><span style="color:#ffd45b;font-size:36px">'+d.winner+'</span><br>鹹魚翻身成功！<br><button class="btn" style="margin-top:14px" onclick="location.reload()">再玩一場</button></div>';} }
 if(d.type==='judging'){let n=3;$('judgeOverlay').classList.add('show');$('judgeNum').textContent=n;let jt=setInterval(()=>{n--;if(n<=0){clearInterval(jt);$('judgeOverlay').classList.remove('show');}else $('judgeNum').textContent=n;},1000);}
-if(d.type==='role_changed'){if(d.reason==='eliminated'){showTV('挑戰失敗','先到觀眾席・繼續為選手加油','fail','ELIMINATED',2800);speak('哎呀，這一題可惜了，先到觀眾席繼續幫大家加油');}role=d.role;$('role').textContent='身分：觀眾';$('giveup').style.display='none';if(d.reason==='eliminated')$('msg').innerHTML='😂 <b>答錯或逾時！</b><br>你已掉到觀眾席，繼續陪大家玩！';else $('msg').innerHTML='👋 已放棄正式比賽，現在進入觀眾席。';}
+if(d.type==='role_changed'){if(d.reason==='eliminated'){showTV('挑戰失敗','可留在觀眾席，或立即重新挑戰','fail','ELIMINATED',2800);speak('哎呀，這一題可惜了，你可以留在觀眾席，或立即重新挑戰');}role=d.role;$('role').textContent='身分：觀眾';$('giveup').style.display='none';if(d.reason==='eliminated')$('msg').innerHTML='😂 <b>答錯或逾時！</b><br>您可繼續觀戰，或立即退出本場。<br><button class="btn" style="margin-top:14px;background:#d98b16" onclick="exitSingle()">↩ 退出本場・重新挑戰</button>';else $('msg').innerHTML='👋 已放棄正式比賽，現在進入觀眾席。<br><button class="btn" style="margin-top:14px;background:#d98b16" onclick="exitSingle()">↩ 退出本場・回到首頁</button>';}
+if(d.type==='returned_home'){location.reload();}
 if(d.type==='cancelled'){$('msg').textContent='⚠️ '+d.text;}
 if(d.type==='round'){
  showTV('答案揭曉','正確答案與原因說明','','ANSWER REVEAL',1500);setTimeout(()=>{$('answerTitle').textContent='ABCD'[d.correct]+'　'+(d.correct_text||'已揭曉');$('answerWhy').textContent=d.explanation||'答案解析準備中';$('answerReveal').classList.add('show');speak('正確答案是'+('ABCD'[d.correct]||'') );},1200);setTimeout(()=>$('answerReveal').classList.remove('show'),6500);
